@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      overflow: hidden;
+      font-family: Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    #list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    .user {
+      color: #ffffff;
+      font-size: 32px;
+      font-weight: 600;
+      padding: 8px 16px;
+      margin-bottom: 8px;
+
+      text-shadow: 1px 1px 2px #000000;
+    }
+
+    .nick {
+      color: #00cc99;
+      font-weight: 700;
+    }
+  </style>
+</head>
+
+<body>
+  <ul id="list"></ul>
+
+  <script>
+    const socket = new WebSocket('ws://127.0.0.1:8881');
+    const list = document.getElementById('list');
+
+    socket.onmessage = function (event) {
+      const data = JSON.parse(event.data);
+
+      if (data.type === 'start') {
+        list.innerHTML = '';
+      } else if (data.type === 'user') {
+        const li = document.createElement('li');
+        li.className = 'user';
+
+        li.innerHTML = `<span class="nick">${data.nick}</span> joined`;
+
+        list.prepend(li);
+
+        setTimeout(() => li.remove(), 10000);
+      }
+    };
+  </script>
+</body>
+
+</html>

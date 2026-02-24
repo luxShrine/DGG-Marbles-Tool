@@ -1,8 +1,11 @@
 use crate::dgg;
+use crate::server;
+use crate::server::Event;
 use anyhow::Result;
 use eframe::egui;
 use std::io::Write;
 use std::{f32, fs::File};
+use tokio::sync::broadcast;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 struct App {
@@ -13,6 +16,7 @@ struct App {
     handle: Option<JoinHandle<Result<Vec<String>>>>,
     receiver: Option<mpsc::UnboundedReceiver<String>>,
     usernames: Vec<String>,
+    tx: broadcast::Sender<Event>,
 }
 impl App {
     fn save_to_csv(&self) {
@@ -27,8 +31,8 @@ impl App {
         println!("Saved {} usernames to usernames.csv", self.usernames.len());
     }
 }
-impl Default for App {
-    fn default() -> Self {
+impl App {
+    fn new(tx: broadcast::Sender<Event>) -> Self {
         Self {
             use_command: false,
             command: String::from("!join"),
@@ -36,6 +40,7 @@ impl Default for App {
             handle: None,
             receiver: None,
             usernames: Vec::new(),
+            tx,
         }
     }
 }
@@ -44,7 +49,8 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         if let Some(ref mut rx) = self.receiver {
             while let Ok(nick) = rx.try_recv() {
-                self.usernames.push(nick);
+                self.usernames.push(nick.clone());
+                let _ = self.tx.send(Event::NewUser(nick));
             }
         }
 
@@ -96,6 +102,7 @@ impl eframe::App for App {
                     self.receiver = Some(rx);
                     self.usernames.clear();
 
+                    let _ = self.tx.send(Event::Start);
                     let time = self.time;
                     let use_command = self.use_command;
                     let command = self.command.clone();
@@ -130,6 +137,11 @@ impl eframe::App for App {
     }
 }
 pub fn start() {
+    let (tx, rx) = broadcast::channel::<Event>(100);
+
+    tokio::spawn(async move {
+        server::start_server(rx).await;
+    });
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([720.0, 430.0]),
         ..Default::default()
@@ -137,7 +149,7 @@ pub fn start() {
     eframe::run_native(
         "DGG Marbles Manager",
         options,
-        Box::new(|_| Ok(Box::<App>::default())),
+        Box::new(|_| Ok(Box::new(App::new(tx)))),
     )
     .unwrap();
 }
