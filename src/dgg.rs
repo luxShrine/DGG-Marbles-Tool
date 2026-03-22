@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use futures_util::StreamExt;
-use serde_json::Value;
+use marbles_tool::types;
 
 use tokio::{sync::mpsc, time::timeout};
 use tokio_tungstenite::connect_async;
@@ -15,7 +15,7 @@ pub async fn connect(
     use_command: bool,
     command: String,
 ) -> Result<Vec<String>> {
-    let mut usernames: Vec<String> = Vec::new();
+    let mut usernames = types::Usernames::new();
     let (stream, _) = connect_async(URL[0])
         .await
         .expect("Error connecting to DGG");
@@ -30,19 +30,15 @@ pub async fn connect(
                 if prefix != "MSG" {
                     continue;
                 }
-                let json: Value = serde_json::from_str(json).expect("Error reading message JSON");
+                let json: types::WSMsg =
+                    serde_json::from_str(json).expect("Error reading message JSON");
 
-                let nick = json["nick"].as_str().unwrap();
-                let data = json["data"].as_str().unwrap();
+                let (nick, data) = json.get_name_data();
 
                 if use_command && !data.trim().to_lowercase().starts_with(command.as_str()) {
                     continue;
                 }
-                if !usernames.contains(&nick.to_owned()) {
-                    usernames.push(nick.to_owned());
-                    println!("{}", nick);
-                    let _ = tx.send(nick.to_owned());
-                }
+                usernames.add_user(nick, &tx);
             }
         }
     })
@@ -51,5 +47,5 @@ pub async fn connect(
         Ok(_) => println!(""),
         Err(_) => println!("Time Limit Reached"),
     }
-    Ok(usernames)
+    Ok(usernames.as_vec())
 }
